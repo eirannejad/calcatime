@@ -1,0 +1,15 @@
+[build-system]
+requires = ["flit"]
+build-backend = "flit.buildapi"
+
+[tool.flit.metadata]
+module = "calcatime"
+author = "Ehsan Iran-Nejad"
+author-email = "eirannejad@gmail.com"
+home-page = "https://github.com/eirannejad/calcatime"
+classifiers = ["License :: OSI Approved :: MIT License"]
+requires = ['docopt',
+            'exchangelib']
+
+[tool.flit.entrypoints."console_scripts"]
+calcatime = "calcatime:main"
