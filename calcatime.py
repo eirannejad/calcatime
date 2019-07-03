@@ -1,24 +1,27 @@
-"""Calculates totat time from calendar events.
+"""Calculates totat time from calendar events and groupes by an event attribute.
 
 Usage:
-    calcatime (-h | --help)
-    calcatime (-V | --version)
-    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--json|--csv]
+    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--json|--csv]
 
 Options:
     -h, --help              Show this help
     -V, --version           Show command version
-    -c <calendar_uri>       Calendar provider:server uri. See Providers.
+    -c <calendar_uri>       Calendar provider:server uri
+                            See Calendar Providers
     -d <domain>             Domain name
     -u <username>           User name
     -p <password>           Password
+    <timespan>              Only include events in given time span
+                            See Timespan Options
+    --by=<event_attr>       Group total times by given event attribute
+                            See Event Attributes
     --json                  Output data to json
     --csv                   Output data to csv
 
 Calendar Providers:
     Microsoft Exchange:     exchange:<server url>
 
-Timespan Tokens:
+Timespan Options:
     today
     yesterday
     monday | mon
@@ -29,13 +32,20 @@ Timespan Tokens:
     saturday | sat
     sunday | sun
     week (current week)
-    last (can specify multiple times e.g. last week)
+    last (can be used multiple times e.g. last last week)
+
+Event Attributes:
+    category
+    name
+    regex_name
+    regex_category
+
 """
-#pylint: disable=C0103
 from enum import Enum
 from collections import namedtuple
 from datetime import datetime, timedelta
 
+# third-party modules
 from docopt import docopt
 
 
@@ -58,7 +68,7 @@ CalendarEvent = namedtuple('CalendarEvent', [
 ])
 
 
-def get_timecal_range(timespan_tokens):
+def parse_timerange_tokens(timespan_tokens):
     """Return start and end of the range specified by tokens."""
     # collect today info
     today = datetime.today()
@@ -72,6 +82,7 @@ def get_timecal_range(timespan_tokens):
     # remove 7 days for each time
     last_offset = -7 * timespan_tokens.count('last')
 
+    # now process the tokens
     if 'today' in timespan_tokens:
         return (today_start + timedelta(days=last_offset),
                 today_end + timedelta(days=last_offset))
@@ -131,9 +142,9 @@ def get_exchange_events(server, domain, username, password,
         )
 
     events = []
-    tz = EWSTimeZone.localzone()
-    local_start = tz.localize(EWSDateTime.from_datetime(range_start))
-    local_end = tz.localize(EWSDateTime.from_datetime(range_end))
+    localzone = EWSTimeZone.localzone()
+    local_start = localzone.localize(EWSDateTime.from_datetime(range_start))
+    local_end = localzone.localize(EWSDateTime.from_datetime(range_end))
     for item in account.calendar.filter(    ##pylint: disable=no-member
             start__range=(local_start, local_end)).order_by('start'):
         events.append(
@@ -172,7 +183,7 @@ def main():
     domain = args.get('-d', None)
 
     # determine requested time span
-    start, end = get_timecal_range(
+    start, end = parse_timerange_tokens(
         args.get('<timespan>', [])
     )
 
