@@ -1,7 +1,7 @@
 """Calculates totat time from calendar events and groupes by an event attribute.
 
 Usage:
-    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--json|--csv]
+    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json|--csv]
 
 Options:
     -h, --help              Show this help
@@ -15,6 +15,7 @@ Options:
                             See Timespan Options
     --by=<event_attr>       Group total times by given event attribute
                             See Event Attributes
+    --include-zero          Include zero totals in output
     --json                  Output data to json
     --csv                   Output data to csv
 
@@ -34,14 +35,14 @@ Timespan Options:
     week (current week)
     last (can be used multiple times e.g. last last week)
 
-Event Attributes:
-    category
-    name
-    regex_name
-    regex_category
+Event Grouping Attributes:
+    category[:<regex_pattern>]
+    title[:<regex_pattern>]
 
 """
 from enum import Enum
+import re
+import json
 from collections import namedtuple
 from datetime import datetime, timedelta
 
@@ -49,8 +50,10 @@ from datetime import datetime, timedelta
 from docopt import docopt
 
 
-__version__ = '1.0'
+__version__ = '0.1'
 
+
+DATETIME_FORMAT = '%Y-%m-%d'
 
 # enum for calendar providers
 class CalendarProvider(Enum):
@@ -158,17 +161,77 @@ def get_exchange_events(server, domain, username, password,
     return events
 
 
+def group_by_title(events):
+    grouped_events = {}
+    for event in events:
+        if event.title in grouped_events:
+            grouped_events[event.title].append(event)
+        else:
+            grouped_events[event.title] = [event]
+    return grouped_events
+
+
+def group_by_category(events, unknown_group='---'):
+    grouped_events = {}
+    for event in events:
+        if event.categories:
+            for cat in event.categories:
+                if cat in grouped_events:
+                    grouped_events[cat].append(event)
+                else:
+                    grouped_events[cat] = [event]
+        else:
+            if unknown_group in grouped_events:
+                grouped_events[unknown_group].append(event)
+            else:
+                grouped_events[unknown_group] = [event]
+    return grouped_events
+
+
+def group_by_pattern(events, pattern, attr='title'):
+    grouped_events = {}
+    for event in events:
+        target_tokens = []
+        if attr == 'title':
+            target_tokens.append(event.title)
+        elif attr == 'category':
+            target_tokens = event.categories
+
+        if target_tokens:
+            for token in target_tokens or []:
+                match = re.search(pattern, token, flags=re.IGNORECASE)
+                if match:
+                    matched_token = match.group()
+                    if matched_token in grouped_events:
+                        grouped_events[matched_token].append(event)
+                    else:
+                        grouped_events[matched_token] = [event]
+                    break
+
+    return grouped_events
+
+
+def cal_total_duration(grouped_events):
+    hours_per_group = {}
+    for event_group, events in grouped_events.items():
+        total_duration = 0
+        for event in events:
+            total_duration += event.duration
+        hours_per_group[event_group] = total_duration
+    return hours_per_group
+
+
 def main():
     """Parse arguments, parse time span, get and organize events, dump data."""
     # process command line args
     args = docopt(__doc__, version='calcatime {}'.format(__version__))
 
     # determine calendar provider
-    calserver = None
-    calprovider = args.get('-c', None)
-    if calprovider:
-        if calprovider.startswith('exchange:'):
-            calserver = calprovider.replace('exchange:', '')
+    calprovider = calserver = None
+    calendar_uri = args.get('-c', None)
+    if calendar_uri:
+        if calendar_uri.startswith('exchange:'):
+            calserver = calendar_uri.replace('exchange:', '')
             calprovider = CalendarProvider.Exchange
     else:
         raise Exception('Calendar provider is required.')
@@ -182,12 +245,30 @@ def main():
     # get domain if provided
     domain = args.get('-d', None)
 
+    # determine grouping attribute, set defaults if not provided
+    grouping_attr = args.get('--by', None)
+    if not grouping_attr:
+        if calprovider == CalendarProvider.Exchange:
+            grouping_attr = 'category'
+        else:
+            grouping_attr = 'title'
+
+    # determine if zeros need to be included
+    include_zero = args.get('--include-zero', False)
+
+    # determine output type, set defaults if not provided
+    json_out = args.get('--json', False)
+    csv_out = args.get('--csv', False)
+    if not (json_out | csv_out):
+        csv_out = True
+
     # determine requested time span
     start, end = parse_timerange_tokens(
         args.get('<timespan>', [])
     )
 
     # collect events from calendar
+    events = None
     if calprovider == CalendarProvider.Exchange:
         events = get_exchange_events(
             server=calserver,
@@ -197,12 +278,53 @@ def main():
             range_start=start,
             range_end=end
             )
+    else:
+        raise Exception('Unknown calendar provider.')
 
-    # organize events
-    for event in events:
-        print(event)
+    # group events
+    grouped_events = {}
+    if events:
+        if grouping_attr.startswith('category:'):
+            token, pattern = grouping_attr.split(':')
+            if pattern:
+                grouped_events = \
+                    group_by_pattern(events, pattern, attr='category')
+        elif grouping_attr == 'category':
+            grouped_events = \
+                group_by_category(events)
+        elif grouping_attr.startswith('title:'):
+            token, pattern = grouping_attr.split(':')
+            if pattern:
+                grouped_events = \
+                    group_by_pattern(events, pattern, attr='title')
+        elif grouping_attr == 'title':
+            grouped_events = \
+                group_by_title(events)
 
-    # dump data
+    # prepare and dump data
+    total_durations = cal_total_duration(grouped_events)
+    calculated_data = []
+    for event_group, events in grouped_events.items():
+        if not include_zero and total_durations[event_group] == 0:
+            continue
+        calculated_data.append({
+            'start': start.strftime(DATETIME_FORMAT),
+            'end': end.strftime(DATETIME_FORMAT),
+            'group': event_group,
+            'duration': total_durations[event_group]
+        })
+
+    if json_out:
+        print(json.dumps(calculated_data))
+    elif csv_out:
+        print('"start","end","group","duration"')
+        for data in calculated_data:
+            print(','.join([
+                '"{}"'.format(data['start']),
+                '"{}"'.format(data['end']),
+                '"{}"'.format(data['group']),
+                str(data['duration'])
+            ]))
 
 
 if __name__ == '__main__':
