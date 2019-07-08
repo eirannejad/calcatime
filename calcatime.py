@@ -2,7 +2,7 @@
 """Calculates totat time from calendar events and groupes by an event attribute.
 
 Usage:
-    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json|--csv]
+    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json|--csv] [--debug]
 
 Options:
     -h, --help              Show this help
@@ -19,6 +19,7 @@ Options:
     --include-zero          Include zero totals in output
     --json                  Output data to json
     --csv                   Output data to csv
+    --debug                 Extended debug logging
 
 Calendar Providers:
     Microsoft Exchange:     exchange:<server url>
@@ -56,7 +57,7 @@ from typing import Dict, List, Optional, Tuple
 from docopt import docopt
 
 
-__version__ = '0.2'
+__version__ = '0.3'
 
 
 DATETIME_FORMAT = '%Y-%m-%d'
@@ -259,6 +260,12 @@ def main():
     """Parse arguments, parse time span, get and organize events, dump data."""
     # process command line args
     args = docopt(__doc__, version='calcatime {}'.format(__version__))
+
+    # extended debug?
+    if args.get('--debug'):
+        import logging
+        from exchangelib.util import PrettyXmlHandler
+        logging.basicConfig(level=logging.DEBUG, handlers=[PrettyXmlHandler()])
 
     # determine calendar provider
     calprovider = calserver = None
