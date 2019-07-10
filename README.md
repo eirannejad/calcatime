@@ -56,6 +56,52 @@ Event Grouping Attributes:
 
 ## Examples
 
+Outputing to CSV
+
+```bash
+$ calcatime -c "office365" -u "myemail@mycomp.com" -p $password last week
+```
+
+```
+"start","end","group","duration"
+"2019-07-01","2019-07-08","Docs",3.0
+"2019-07-01","2019-07-08","BizDev",1.0
+"2019-07-01","2019-07-08","Training",13.25
+"2019-07-01","2019-07-08","Standards",4.0
+"2019-07-01","2019-07-08","Data",8.5
+```
+
+Outputing to JSON
+
 ```bash
 $ calcatime -c "office365" -u "myemail@mycomp.com" -p $password last week --json
+```
+
+```json
+[{
+    "start": "2019-07-01",
+    "end": "2019-07-08",
+    "group": "Docs",
+    "duration": 3.0
+}, {
+    "start": "2019-07-01",
+    "end": "2019-07-08",
+    "group": "BizDev",
+    "duration": 1.0
+}, {
+    "start": "2019-07-01",
+    "end": "2019-07-08",
+    "group": "Training",
+    "duration": 13.25
+}, {
+    "start": "2019-07-01",
+    "end": "2019-07-08",
+    "group": "Standards",
+    "duration": 4.0
+}, {
+    "start": "2019-07-01",
+    "end": "2019-07-08",
+    "group": "Data",
+    "duration": 8.5
+}]
 ```
