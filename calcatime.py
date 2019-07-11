@@ -16,7 +16,7 @@ Options:
     <timespan>              Only include events in given time span
                             ↓ See Timespan Options
     --by=<event_attr>       Group total times by given event attribute
-                            See Event Attributes
+                            ↓ See Event Attributes
     --include-zero          Include zero totals in output
     --json                  Output data to json; default is csv
     --debug                 Extended debug logging
@@ -40,7 +40,7 @@ Timespan Options:
     monday | mon
     tuesday | tue
     wednesday | wed
-    thurday | thu
+    thursday | thu
     friday | fri
     saturday | sat
     sunday | sun

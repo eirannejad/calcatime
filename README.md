@@ -1,6 +1,6 @@
 # calcatime
 
-This is a python commandl ine utility that helps collecting calendar events from a calendar provider (e.g. Office365) within the specified period, grouping the events using an event attribute, and calculating the total time spent for each group.
+This is a python command line utility that helps collecting calendar events from a calendar provider (e.g. Office365) within the specified period, grouping the events using an event attribute, and calculating the total time spent for each group.
 
 The calendar shown below, assigned categories to each event and this utility can be used to collect the events, group by category, and output the total time spent under each category.
 
@@ -8,10 +8,10 @@ The calendar shown below, assigned categories to each event and this utility can
 
 ## Examples
 
-Outputing to CSV
+Outputting to CSV
 
 ```bash
-$ calcatime -c "office365" -u "myemail@mycomp.com" -p $password last week
+$ calcatime -c "office365" -u "email@company.com" -p $password last week
 ```
 
 ```
@@ -23,10 +23,10 @@ $ calcatime -c "office365" -u "myemail@mycomp.com" -p $password last week
 "2019-07-01","2019-07-08","Data",8.5
 ```
 
-Outputing to JSON
+Outputting to JSON
 
 ```bash
-$ calcatime -c "office365" -u "myemail@mycomp.com" -p $password last week --json
+$ calcatime -c "office365" -u "email@company.com" -p $password last week --json
 ```
 
 ```json
@@ -67,23 +67,28 @@ pip install calcatime
 ## Usage
 
 ```
-$ calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug]
+$ Calculates total time from calendar events, grouped by an event attribute.
+
+Usage:
+    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug]
+
 
 Options:
     -h, --help              Show this help
     -V, --version           Show command version
     -c <calendar_uri>       Calendar provider:server uri
-                            See Calendar Providers ↓
+                            ↓ See Calendar Providers
     -d <domain>             Domain name
     -u <username>           User name
     -p <password>           Password
     <timespan>              Only include events in given time span
-                            See Timespan Options ↓
+                            ↓ See Timespan Options
     --by=<event_attr>       Group total times by given event attribute
-                            See Event Attributes
+                            ↓ See Event Attributes
     --include-zero          Include zero totals in output
     --json                  Output data to json; default is csv
     --debug                 Extended debug logging
+
 
 Calendar Providers:
     Microsoft Exchange:     exchange:<server url>
@@ -99,11 +104,12 @@ Timespan Options:
     monday | mon
     tuesday | tue
     wednesday | wed
-    thurday | thu
+    thursday | thu
     friday | fri
     saturday | sat
     sunday | sun
     last (can be used multiple times e.g. last last week)
+    next (can be used multiple times e.g. next next week)
 
 Event Grouping Attributes:
     category[:<regex_pattern>]
