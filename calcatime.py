@@ -4,6 +4,7 @@
 Usage:
     calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug]
 
+
 Options:
     -h, --help              Show this help
     -V, --version           Show command version
@@ -19,6 +20,11 @@ Options:
     --include-zero          Include zero totals in output
     --json                  Output data to json; default is csv
     --debug                 Extended debug logging
+
+
+Examples:
+    $ calcatime -c "office365" -u "email@company.com" -p $password last week --json
+
 
 Calendar Providers:
     Microsoft Exchange:     exchange:<server url>
@@ -39,32 +45,35 @@ Timespan Options:
     saturday | sat
     sunday | sun
     last (can be used multiple times e.g. last last week)
+    next (can be used multiple times e.g. next next week)
 
 Event Grouping Attributes:
     category[:<regex_pattern>]
     title[:<regex_pattern>]
 
 """
+# python native modules
 import sys
 import re
 import json
-from collections import namedtuple
-from datetime import datetime, timedelta
 import calendar
-from typing import Dict, List, Optional, Tuple
-
+from enum import Enum
+from datetime import datetime, timedelta
+from collections import namedtuple
+from typing import Dict, List, Optional, Tuple, Iterator
 
 # third-party modules
 from docopt import docopt
 
 
-__version__ = '0.4'
+__version__ = '0.5'
 
-
+# Configs ---------------------------------------------------------------------
+# default format used for outputting datetime values
 DATETIME_FORMAT = '%Y-%m-%d'
 
-
-# unified tuple for holding calendar event properties
+# Data types ------------------------------------------------------------------
+# tuple for command line arguments
 Configs = namedtuple('Configs', [
     'calendar_provider',
     'username',
@@ -77,8 +86,8 @@ Configs = namedtuple('Configs', [
     'output_type'
 ])
 
-
-# unified tuple for holding calendar event properties
+# tuple for holding calendar event properties
+# irrelevant of the calendar provider
 CalendarEvent = namedtuple('CalendarEvent', [
     'title',
     'start',
@@ -87,8 +96,7 @@ CalendarEvent = namedtuple('CalendarEvent', [
     'categories'
 ])
 
-
-# calendar provider configs
+# tuple for calendar provider configs
 CalendarProvider = namedtuple('CalendarProvider', [
     'name',
     'prefix',
@@ -96,8 +104,8 @@ CalendarProvider = namedtuple('CalendarProvider', [
     'supports_categories'
 ])
 
-# enum for calendar providers
-class CalendarProviders(object):
+# calendar providers enum
+class CalendarProviders(Enum):
     """Supported calendar providers"""
 
     # microsoft exchange server, server url must be provided
@@ -114,43 +122,44 @@ class CalendarProviders(object):
                          server='outlook.office365.com',
                          supports_categories=True)
 
-    @classmethod
-    def get_providers(cls):
-        """Get list of supported providers."""
-        return iter([cls.Exchange, cls.Office365])
 
-    @classmethod
-    def get_provider(cls, connection_string: str) -> CalendarProvider:
-        """Get provider configs from connection string."""
-        # determine calendar provider
-        if connection_string:
-            connstr = connection_string.lower()
-            for calprov in cls.get_providers():
-                if calprov.prefix in connstr:
-                    # grab server url from connection string
-                    calserver = None
-                    match = \
-                        re.search(f'{calprov.prefix}:(.+)?', connstr, re.IGNORECASE)
-                    if match:
-                        calserver = match.group(1)
+# Functions -------------------------------------------------------------------
+def get_providers() -> List[CalendarProvider]:
+    """Get list of supported providers."""
+    return [x.value for x in CalendarProviders]
 
-                    if not calprov.server and not calserver:
-                        raise Exception('Calendar provider server url is required.')
 
-                    # create provider configs
-                    return CalendarProvider(
-                        name=calprov.name,
-                        prefix=calprov.prefix,
-                        server=calserver or calprov.server,
-                        supports_categories=calprov.supports_categories
-                        )
+def get_provider(connection_string: str) -> CalendarProvider:
+    """Get provider configs from connection string."""
+    # determine calendar provider
+    if connection_string:
+        connstr = connection_string.lower()
+        for calprov in get_providers():
+            if calprov.prefix in connstr:
+                # grab server url from connection string
+                calserver = None
+                match = \
+                    re.search(f'{calprov.prefix}:(.+)?', connstr, re.IGNORECASE)
+                if match:
+                    calserver = match.group(1)
 
-        raise Exception('Calendar provider is not supported.')
+                if not calprov.server and not calserver:
+                    raise Exception('Calendar provider server url is required.')
+
+                # create provider configs
+                return CalendarProvider(
+                    name=calprov.name,
+                    prefix=calprov.prefix,
+                    server=calserver or calprov.server,
+                    supports_categories=calprov.supports_categories
+                    )
+
+    raise Exception('Calendar provider is not supported.')
 
 
 
 def parse_configs() -> Configs:
-    """Parse command line agruments and return configs"""
+    """Parse command line arguments and return configs"""
     # process command line args
     args = docopt(__doc__, version='calcatime {}'.format(__version__))
 
@@ -161,7 +170,7 @@ def parse_configs() -> Configs:
         logging.basicConfig(level=logging.DEBUG, handlers=[PrettyXmlHandler()])
 
     # determine calendar provider
-    calprovider = CalendarProviders.get_provider(args.get('-c', None))
+    calprovider = get_provider(args.get('-c', None))
 
     # determine credentials
     username = args.get('-u', None)
@@ -183,7 +192,7 @@ def parse_configs() -> Configs:
     # determine if zeros need to be included
     include_zero = args.get('--include-zero', False)
 
-    # determine output type, set defaults if not provided
+    # determine output type, defaults to csv
     json_out = args.get('--json', False)
 
     # determine requested time span
@@ -258,7 +267,7 @@ def parse_timerange_tokens(timespan_tokens: List[str]) -> Tuple[datetime, dateti
     elif 'century' in timespan_tokens:
         raise NotImplementedError()
 
-    elif 'millenium' in timespan_tokens:
+    elif 'millennium' in timespan_tokens:
         raise NotImplementedError()
 
     # process week days
@@ -266,15 +275,15 @@ def parse_timerange_tokens(timespan_tokens: List[str]) -> Tuple[datetime, dateti
             zip(map(str.lower, list(calendar.day_name)),
                 map(str.lower, list(calendar.day_abbr)))):
         if any(x in timespan_tokens for x in day_names):
-            rstart = week_start + timedelta(days=idx + offset)
-            rend = week_start + timedelta(days=idx + 1 + offset)
-            return (rstart, rend)
+            range_start = week_start + timedelta(days=idx + offset)
+            range_end = week_start + timedelta(days=idx + 1 + offset)
+            return (range_start, range_end)
 
     raise Exception('Can not determine time span.')
 
 
 def collect_events(configs: Configs) -> List[CalendarEvent]:
-    """Use calendar provider API to colelct events within given range."""
+    """Use calendar provider API to collect events within given range."""
     # collect events from calendar
     events: List[CalendarEvent] = []
     provider = configs.calendar_provider
@@ -317,6 +326,7 @@ def get_exchange_events(server: str,
         access_type=DELEGATE
         )
 
+    # collect event information within given time range
     events: List[CalendarEvent] = []
     localzone = EWSTimeZone.localzone()
     local_start = localzone.localize(EWSDateTime.from_datetime(range_start))
@@ -339,28 +349,29 @@ def group_events(events: List[CalendarEvent],
     """Group events by given attribute."""
     # group events
     grouped_events: Dict[str, List[CalendarEvent]] = {}
-    gattr = configs.grouping_attr
+    group_attr = configs.grouping_attr
     if events:
-        if gattr.startswith('category:'):
-            _, pattern = gattr.split(':')
+        if group_attr.startswith('category:'):
+            _, pattern = group_attr.split(':')
             if pattern:
                 grouped_events = \
                     group_by_pattern(events, pattern, attr='category')
-        elif gattr == 'category':
+        elif group_attr == 'category':
             grouped_events = \
                 group_by_category(events)
-        elif gattr.startswith('title:'):
-            _, pattern = gattr.split(':')
+        elif group_attr.startswith('title:'):
+            _, pattern = group_attr.split(':')
             if pattern:
                 grouped_events = \
                     group_by_pattern(events, pattern, attr='title')
-        elif gattr == 'title':
+        elif group_attr == 'title':
             grouped_events = \
                 group_by_title(events)
     return grouped_events
 
 
-def group_by_title(events: List[CalendarEvent]) -> Dict[str, List[CalendarEvent]]:
+def group_by_title(
+        events: List[CalendarEvent]) -> Dict[str, List[CalendarEvent]]:
     """Group given events by event title."""
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     for event in events:
@@ -416,7 +427,8 @@ def group_by_pattern(events: List[CalendarEvent],
     return grouped_events
 
 
-def cal_total_duration(grouped_events: Dict[str, List[CalendarEvent]]) -> Dict[str, float]:
+def cal_total_duration(
+        grouped_events: Dict[str, List[CalendarEvent]]) -> Dict[str, float]:
     """Calculate total duration of events in each group."""
     hours_per_group: Dict[str, float] = {}
     for event_group, events in grouped_events.items():
@@ -427,8 +439,8 @@ def cal_total_duration(grouped_events: Dict[str, List[CalendarEvent]]) -> Dict[s
     return hours_per_group
 
 
-def prepare_and_dump(grouped_events: Dict[str, List[CalendarEvent]],
-                     configs: Configs):
+def calculate_and_dump(grouped_events: Dict[str, List[CalendarEvent]],
+                       configs: Configs):
     """Calculate totals and dump event data."""
     total_durations = cal_total_duration(grouped_events)
     calculated_data: List[Dict] = []
@@ -455,6 +467,7 @@ def prepare_and_dump(grouped_events: Dict[str, List[CalendarEvent]],
             ]))
 
 
+# Main ------------------------------------------------------------------------
 def main():
     """Parse arguments, parse time span, get and organize events, dump data."""
     # get configs
@@ -467,12 +480,8 @@ def main():
     grouped_events = group_events(events, configs)
 
     # prepare and dump data
-    prepare_and_dump(grouped_events, configs)
+    calculate_and_dump(grouped_events, configs)
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as ex:
-        print(ex)
-        sys.exit(1)
+    main()
