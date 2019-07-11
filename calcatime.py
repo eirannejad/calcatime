@@ -1,5 +1,5 @@
 #pylint: disable=line-too-long,broad-except
-"""Calculates totat time from calendar events and groupes by an event attribute.
+"""Calculates total time from calendar events, grouped by an event attribute.
 
 Usage:
     calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug]
@@ -8,12 +8,12 @@ Options:
     -h, --help              Show this help
     -V, --version           Show command version
     -c <calendar_uri>       Calendar provider:server uri
-                            See Calendar Providers ↓
+                            ↓ See Calendar Providers
     -d <domain>             Domain name
     -u <username>           User name
     -p <password>           Password
     <timespan>              Only include events in given time span
-                            See Timespan Options ↓
+                            ↓ See Timespan Options
     --by=<event_attr>       Group total times by given event attribute
                             See Event Attributes
     --include-zero          Include zero totals in output
