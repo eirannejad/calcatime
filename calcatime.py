@@ -2,7 +2,7 @@
 """Calculates total time from calendar events, grouped by an event attribute.
 
 Usage:
-    calcatime -c <calendar_uri> [-d <domain>] -u <username> -p <password> <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug]
+    calcatime -c <calendar_uri> [-d <domain>] [-u <username> -p <password>] <timespan>... [--by <event_attr>] [--include-zero] [--json] [--debug] [--cache-creds]
 
 
 Options:
@@ -11,7 +11,7 @@ Options:
     -c <calendar_uri>       Calendar provider:server uri
                             ↓ See Calendar Providers
     -d <domain>             Domain name
-    -u <username>           User name
+    -u <username>           Username
     -p <password>           Password
     <timespan>              Only include events in given time span
                             ↓ See Timespan Options
@@ -30,6 +30,8 @@ Calendar Providers:
     Microsoft Exchange:     exchange:<server url>
     Office365:              office365[:<server url>]
                             default server url = outlook.office365.com
+    Gmail:                  gmail[:primary]
+                            gmail:primary pulls events from primary calendar
 
 Timespan Options:
     today
@@ -53,6 +55,7 @@ Event Grouping Attributes:
 
 """
 # python native modules
+import os
 import sys
 import re
 import json
@@ -64,9 +67,9 @@ from typing import Dict, List, Optional, Tuple, Iterator
 
 # third-party modules
 from docopt import docopt
+from tzlocal import get_localzone
 
-
-__version__ = '0.5'
+__version__ = '0.6'
 
 # Configs ---------------------------------------------------------------------
 # default format used for outputting datetime values
@@ -83,7 +86,8 @@ Configs = namedtuple('Configs', [
     'domain',
     'grouping_attr',
     'include_zero',
-    'output_type'
+    'output_type',
+    'cache_creds'
 ])
 
 # tuple for holding calendar event properties
@@ -98,9 +102,11 @@ CalendarEvent = namedtuple('CalendarEvent', [
 
 # tuple for calendar provider configs
 CalendarProvider = namedtuple('CalendarProvider', [
-    'name',
+    'title',
     'prefix',
     'server',
+    'requires_url',
+    'requires_creds',
     'supports_categories'
 ])
 
@@ -110,17 +116,30 @@ class CalendarProviders(Enum):
 
     # microsoft exchange server, server url must be provided
     Exchange: CalendarProvider = \
-        CalendarProvider(name='Microsoft Exchange',
+        CalendarProvider(title='Microsoft Exchange',
                          prefix='exchange',
                          server='',
+                         requires_url=True,
+                         requires_creds=True,
                          supports_categories=True)
 
     # microsoft Office365, default url is provided
     Office365: CalendarProvider = \
-        CalendarProvider(name='Office365',
+        CalendarProvider(title='Office365',
                          prefix='office365',
                          server='outlook.office365.com',
+                         requires_url=False,
+                         requires_creds=True,
                          supports_categories=True)
+
+    # Google mail (GMail)
+    Gmail: CalendarProvider = \
+        CalendarProvider(title='Google Mail (Gmail)',
+                         prefix='gmail',
+                         server='',
+                         requires_url=False,
+                         requires_creds=False,
+                         supports_categories=False)
 
 
 # Functions -------------------------------------------------------------------
@@ -143,19 +162,20 @@ def get_provider(connection_string: str) -> CalendarProvider:
                 if match:
                     calserver = match.group(1)
 
-                if not calprov.server and not calserver:
+                if calprov.requires_url and not calprov.server and not calserver:
                     raise Exception('Calendar provider server url is required.')
 
                 # create provider configs
                 return CalendarProvider(
-                    name=calprov.name,
+                    title=calprov.title,
                     prefix=calprov.prefix,
                     server=calserver or calprov.server,
+                    requires_url=calprov.requires_url,
+                    requires_creds=calprov.requires_creds,
                     supports_categories=calprov.supports_categories
                     )
 
     raise Exception('Calendar provider is not supported.')
-
 
 
 def parse_configs() -> Configs:
@@ -175,7 +195,7 @@ def parse_configs() -> Configs:
     # determine credentials
     username = args.get('-u', None)
     password = args.get('-p', None)
-    if not username or not password:
+    if calprovider.requires_creds and not (username or password):
         raise Exception('Calendar access credentials are required.')
 
     # get domain if provided
@@ -209,7 +229,8 @@ def parse_configs() -> Configs:
         domain=domain,
         grouping_attr=grouping_attr,
         include_zero=include_zero,
-        output_type='json' if json_out else 'csv'
+        output_type='json' if json_out else 'csv',
+        cache_creds=args.get('--cache-creds', False)
         )
 
 
@@ -288,8 +309,8 @@ def collect_events(configs: Configs) -> List[CalendarEvent]:
     events: List[CalendarEvent] = []
     provider = configs.calendar_provider
     # if provider uses exchange api:
-    if provider.name == CalendarProviders.Exchange.name \
-            or provider.name == CalendarProviders.Office365.name:
+    if provider.title == CalendarProviders.Exchange.value.title \
+            or provider.title == CalendarProviders.Office365.value.title:
         events = get_exchange_events(
             server=provider.server,
             domain=configs.domain,
@@ -298,6 +319,16 @@ def collect_events(configs: Configs) -> List[CalendarEvent]:
             range_start=configs.range_start,
             range_end=configs.range_end
             )
+
+    # if provider uses google mail api:
+    elif provider.title == CalendarProviders.Gmail.value.title:
+        events = get_google_events(
+            range_start=configs.range_start,
+            range_end=configs.range_end,
+            primary_only=configs.calendar_provider.server == 'primary',
+            keep_token=configs.cache_creds
+        )
+
     # otherwise the api is not implemented
     else:
         raise Exception('Calendar provider API is not yet implemented.')
@@ -341,6 +372,92 @@ def get_exchange_events(server: str,
                 duration=(item.end - item.start).seconds / 3600,
                 categories=item.categories
             ))
+    return events
+
+
+def _get_google_calendar_service(keep_token: bool=True):
+    # https://developers.google.com/calendar/api/quickstart/python
+    from googleapiclient.discovery import build
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    # If modifying these scopes, delete the file token.json.
+    SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if keep_token and os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(
+                port=0,
+                authorization_prompt_message=''
+                )
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    return build('calendar', 'v3', credentials=creds)
+
+
+def _clear_google_service():
+    if os.path.exists('token.json'):
+        os.remove('token.json')
+
+
+def get_google_events(
+        range_start: datetime,
+        range_end: datetime,
+        primary_only: bool = True,
+        keep_token: bool=True) -> List[CalendarEvent]:
+    service = _get_google_calendar_service(keep_token)
+    # collect calendars owned by user
+    calendar_ids = []
+    calendars = service.calendarList().list().execute().get('items', [])
+    if primary_only:
+        calendar_ids = [x['id'] for x in calendars if x.get('primary', False)]
+    else:
+        calendar_ids = [x['id'] for x in calendars if x.get('accessRole', '') == 'owner']
+
+    events: List[CalendarEvent] = []
+    timeMin = range_start.isoformat() + 'Z' # 'Z' indicates UTC time
+    timeMax = range_end.isoformat() + 'Z' # 'Z' indicates UTC time
+    for cal_id in calendar_ids:
+        events_result = service.events().list(
+            calendarId=cal_id,
+            timeMin=timeMin,
+            timeMax=timeMax,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        gcal_events = events_result.get('items', [])
+        for event in gcal_events:
+            # if this is not an all-day event
+            if not event['end'].get('date', None):
+                title = event['summary']
+                start = datetime.fromisoformat(event['start']['dateTime'])
+                end = datetime.fromisoformat(event['end']['dateTime'])
+                events.append(
+                    CalendarEvent(
+                        title=title,
+                        start=start,
+                        end=end,
+                        duration=(end - start).seconds / 3600,
+                        categories=cal_id
+                    ))
+
+    if not keep_token:
+        _clear_google_service()
     return events
 
 
