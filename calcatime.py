@@ -56,6 +56,8 @@ Event Grouping Attributes:
 """
 # python native modules
 import os
+import os.path as op
+import tempfile
 import sys
 import re
 import json
@@ -396,8 +398,21 @@ def _get_google_calendar_service(keep_token: bool=True):
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'calcatime_credentials.json',
+            flow = InstalledAppFlow.from_client_config(
+                {
+                    "installed": {
+                            "client_id": "467758868362-r03j6itpkk5hl095q8ghho8kvj4nlfu0.apps.googleusercontent.com",
+                            "project_id": "calendar-time-calculator",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "https://oauth2.googleapis.com/token",
+                            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                            "client_secret": "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",
+                            "redirect_uris": [
+                                "urn:ietf:wg:oauth:2.0:oob",
+                                "http://localhost"
+                        ]
+                    }
+                },
                 SCOPES
                 )
             creds = flow.run_local_server(
@@ -405,15 +420,17 @@ def _get_google_calendar_service(keep_token: bool=True):
                 authorization_prompt_message=''
                 )
         # Save the credentials for the next run
-        with open('token.json', 'w') as token:
+        token_file = op.join(tempfile.gettempdir(), 'calcatime_token.json')
+        with open(token_file, 'w') as token:
             token.write(creds.to_json())
 
     return build('calendar', 'v3', credentials=creds)
 
 
 def _clear_google_service():
-    if os.path.exists('token.json'):
-        os.remove('token.json')
+    token_file = op.join(tempfile.gettempdir(), 'calcatime_token.json')
+    if os.path.exists(token_file):
+        os.remove(token_file)
 
 
 def get_google_events(
