@@ -397,7 +397,9 @@ def _get_google_calendar_service(keep_token: bool=True):
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
+                'calcatime_credentials.json',
+                SCOPES
+                )
             creds = flow.run_local_server(
                 port=0,
                 authorization_prompt_message=''
