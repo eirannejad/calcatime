@@ -29,5 +29,3 @@ calcatime = "calcatime:main"
 
 [tool.flit.module]
 name = "calcatime"
-
-[in]
