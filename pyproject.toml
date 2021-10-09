@@ -1,15 +1,33 @@
 [build-system]
-requires = ["flit"]
-build-backend = "flit.buildapi"
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
 
-[tool.flit.metadata]
-module = "calcatime"
-author = "Ehsan Iran-Nejad"
-author-email = "eirannejad@gmail.com"
-home-page = "https://github.com/eirannejad/calcatime"
+[project]
+name = "calcatime"
+authors = [
+    {name = "Ehsan Iran-Nejad", email = "eirannejad@gmail.com"},
+]
+readme = "README.md"
 classifiers = ["License :: OSI Approved :: MIT License"]
-requires = ['docopt',
-            'exchangelib']
+requires-python = ">=3.5"
+dynamic = ['version', 'description']
+dependencies = [
+    'docopt',
+    'exchangelib',
+    'google-api-python-client',
+    'google-auth-httplib2',
+    'google-auth-oauthlib',
+    'tzlocal'
+    ]
 
-[tool.flit.entrypoints."console_scripts"]
+[project.urls]
+Documentation = "https://github.com/eirannejad/calcatime"
+Source = "https://github.com/eirannejad/calcatime"
+
+[project.scripts]
 calcatime = "calcatime:main"
+
+[tool.flit.module]
+name = "calcatime"
+
+[in]
