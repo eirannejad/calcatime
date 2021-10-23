@@ -50,8 +50,9 @@ Timespan Options:
     next (can be used multiple times e.g. next next week)
 
 Event Grouping Attributes:
-    category[:<regex_pattern>]
-    title[:<regex_pattern>]
+    category[:<regex>]      List events with category matching regex
+    title[:<regex>]         List events with title matching regex
+    title:[?]               Group events by bracket tags in title e.g. "CPython [Read]"
 
 """
 # python native modules
@@ -71,7 +72,7 @@ from typing import Dict, List, Optional, Tuple, Iterator
 from docopt import docopt
 from tzlocal import get_localzone
 
-__version__ = "0.6"
+__version__ = "0.7"
 
 # Configs ---------------------------------------------------------------------
 # default format used for outputting datetime values
@@ -521,23 +522,30 @@ def group_events(
         elif group_attr.startswith("title:"):
             _, pattern = group_attr.split(":")
             if pattern:
-                grouped_events = \
-                    group_by_pattern(events, pattern, attr='title')
-        elif group_attr == 'title':
-            grouped_events = \
-                group_by_title(events)
+                if pattern == "[?]":
+                    grouped_events = group_by_title(events, parse_bracket_tags=True)
+                else:
+                    grouped_events = group_by_pattern(events, pattern, attr="title")
+        elif group_attr == "title":
+            grouped_events = group_by_title(events)
     return grouped_events
 
 
 def group_by_title(
-        events: List[CalendarEvent]) -> Dict[str, List[CalendarEvent]]:
+    events: List[CalendarEvent], parse_bracket_tags: bool = False
+) -> Dict[str, List[CalendarEvent]]:
     """Group given events by event title."""
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     for event in events:
-        if event.title in grouped_events:
-            grouped_events[event.title].append(event)
+        title = event.title
+        # if title contains grouping in brackets
+        m = re.match(".*\[(.+)\].*", title)
+        if parse_bracket_tags and m:
+            title = m.groups()[0]
+        if title in grouped_events:
+            grouped_events[title].append(event)
         else:
-            grouped_events[event.title] = [event]
+            grouped_events[title] = [event]
     return grouped_events
 
 
