@@ -1,4 +1,4 @@
-#pylint: disable=line-too-long,broad-except
+# pylint: disable=line-too-long,broad-except
 """Calculates total time from calendar events, grouped by an event attribute.
 
 Usage:
@@ -71,77 +71,82 @@ from typing import Dict, List, Optional, Tuple, Iterator
 from docopt import docopt
 from tzlocal import get_localzone
 
-__version__ = '0.6'
+__version__ = "0.6"
 
 # Configs ---------------------------------------------------------------------
 # default format used for outputting datetime values
-DATETIME_FORMAT = '%Y-%m-%d'
+DATETIME_FORMAT = "%Y-%m-%d"
 
 # Data types ------------------------------------------------------------------
 # tuple for command line arguments
-Configs = namedtuple('Configs', [
-    'calendar_provider',
-    'username',
-    'password',
-    'range_start',
-    'range_end',
-    'domain',
-    'grouping_attr',
-    'include_zero',
-    'output_type',
-    'cache_creds'
-])
+Configs = namedtuple(
+    "Configs",
+    [
+        "calendar_provider",
+        "username",
+        "password",
+        "range_start",
+        "range_end",
+        "domain",
+        "grouping_attr",
+        "include_zero",
+        "output_type",
+        "cache_creds",
+    ],
+)
 
 # tuple for holding calendar event properties
 # irrelevant of the calendar provider
-CalendarEvent = namedtuple('CalendarEvent', [
-    'title',
-    'start',
-    'end',
-    'duration',
-    'categories'
-])
+CalendarEvent = namedtuple(
+    "CalendarEvent", ["title", "start", "end", "duration", "categories"]
+)
 
 # tuple for calendar provider configs
-CalendarProvider = namedtuple('CalendarProvider', [
-    'title',
-    'prefix',
-    'server',
-    'requires_url',
-    'requires_creds',
-    'supports_categories'
-])
+CalendarProvider = namedtuple(
+    "CalendarProvider",
+    [
+        "title",
+        "prefix",
+        "server",
+        "requires_url",
+        "requires_creds",
+        "supports_categories",
+    ],
+)
 
 # calendar providers enum
 class CalendarProviders(Enum):
     """Supported calendar providers"""
 
     # microsoft exchange server, server url must be provided
-    Exchange: CalendarProvider = \
-        CalendarProvider(title='Microsoft Exchange',
-                         prefix='exchange',
-                         server='',
-                         requires_url=True,
-                         requires_creds=True,
-                         supports_categories=True)
+    Exchange: CalendarProvider = CalendarProvider(
+        title="Microsoft Exchange",
+        prefix="exchange",
+        server="",
+        requires_url=True,
+        requires_creds=True,
+        supports_categories=True,
+    )
 
     # microsoft Office365, default url is provided
-    Office365: CalendarProvider = \
-        CalendarProvider(title='Office365',
-                         prefix='office365',
-                         server='outlook.office365.com',
-                         requires_url=False,
-                         requires_creds=True,
-                         supports_categories=True)
+    Office365: CalendarProvider = CalendarProvider(
+        title="Office365",
+        prefix="office365",
+        server="outlook.office365.com",
+        requires_url=False,
+        requires_creds=True,
+        supports_categories=True,
+    )
 
     # Google mail (GMail)
-    Gmail: CalendarProvider = \
-        CalendarProvider(title='Google Mail (Gmail)',
-                         prefix='gmail',
-                         server='',
-                         requires_url=False,
-                         requires_creds=False,
-                         supports_categories=False)
+    Gmail: CalendarProvider = CalendarProvider(
+        title="Google Mail (Gmail)",
+        prefix="gmail",
+        server="",
+        requires_url=False,
+        requires_creds=False,
+        supports_categories=False,
+    )
 
 
 # Functions -------------------------------------------------------------------
@@ -159,13 +164,12 @@ def get_provider(connection_string: str) -> CalendarProvider:
             if calprov.prefix in connstr:
                 # grab server url from connection string
                 calserver = None
-                match = \
-                    re.search(f'{calprov.prefix}:(.+)?', connstr, re.IGNORECASE)
+                match = re.search(f"{calprov.prefix}:(.+)?", connstr, re.IGNORECASE)
                 if match:
                     calserver = match.group(1)
 
                 if calprov.requires_url and not calprov.server and not calserver:
-                    raise Exception('Calendar provider server url is required.')
+                    raise Exception("Calendar provider server url is required.")
 
                 # create provider configs
                 return CalendarProvider(
@@ -174,53 +178,52 @@ def get_provider(connection_string: str) -> CalendarProvider:
                     server=calserver or calprov.server,
                     requires_url=calprov.requires_url,
                     requires_creds=calprov.requires_creds,
-                    supports_categories=calprov.supports_categories
-                    )
+                    supports_categories=calprov.supports_categories,
+                )
 
-    raise Exception('Calendar provider is not supported.')
+    raise Exception("Calendar provider is not supported.")
 
 
 def parse_configs() -> Configs:
     """Parse command line arguments and return configs"""
     # process command line args
-    args = docopt(__doc__, version='calcatime {}'.format(__version__))
+    args = docopt(__doc__, version="calcatime {}".format(__version__))
 
     # extended debug?
-    if args.get('--debug'):
+    if args.get("--debug"):
         import logging
         from exchangelib.util import PrettyXmlHandler
+
         logging.basicConfig(level=logging.DEBUG, handlers=[PrettyXmlHandler()])
 
     # determine calendar provider
-    calprovider = get_provider(args.get('-c', None))
+    calprovider = get_provider(args.get("-c", None))
 
     # determine credentials
-    username = args.get('-u', None)
-    password = args.get('-p', None)
+    username = args.get("-u", None)
+    password = args.get("-p", None)
     if calprovider.requires_creds and not (username or password):
-        raise Exception('Calendar access credentials are required.')
+        raise Exception("Calendar access credentials are required.")
 
     # get domain if provided
-    domain = args.get('-d', None)
+    domain = args.get("-d", None)
 
     # determine grouping attribute, set defaults if not provided
-    grouping_attr = args.get('--by', None)
+    grouping_attr = args.get("--by", None)
     if not grouping_attr:
         if calprovider.supports_categories:
-            grouping_attr = 'category'
+            grouping_attr = "category"
         else:
-            grouping_attr = 'title'
+            grouping_attr = "title"
 
     # determine if zeros need to be included
-    include_zero = args.get('--include-zero', False)
+    include_zero = args.get("--include-zero", False)
 
     # determine output type, defaults to csv
-    json_out = args.get('--json', False)
+    json_out = args.get("--json", False)
 
     # determine requested time span
-    start, end = parse_timerange_tokens(
-        args.get('<timespan>', [])
-    )
+    start, end = parse_timerange_tokens(args.get("<timespan>", []))
 
     return Configs(
         calendar_provider=calprovider,
@@ -231,9 +234,9 @@ def parse_configs() -> Configs:
         domain=domain,
         grouping_attr=grouping_attr,
         include_zero=include_zero,
-        output_type='json' if json_out else 'csv',
-        cache_creds=args.get('--cache-creds', False)
-        )
+        output_type="json" if json_out else "csv",
+        cache_creds=args.get("--cache-creds", False),
+    )
 
 
 def parse_timerange_tokens(timespan_tokens: List[str]) -> Tuple[datetime, datetime]:
@@ -248,61 +251,70 @@ def parse_timerange_tokens(timespan_tokens: List[str]) -> Tuple[datetime, dateti
 
     # count the number of times 'last' token is provided
     # remove 7 days for each count
-    last_count = timespan_tokens.count('last')
+    last_count = timespan_tokens.count("last")
     last_offset = -7 * last_count
 
     # count the number of times 'next' token is provided
     # add 7 days for each count
-    next_count = timespan_tokens.count('next')
+    next_count = timespan_tokens.count("next")
     next_offset = 7 * next_count
 
     offset = last_offset + next_offset
 
     # now process the known tokens
-    if 'today' in timespan_tokens:
-        return (today_start + timedelta(days=offset),
-                today_end + timedelta(days=offset))
+    if "today" in timespan_tokens:
+        return (
+            today_start + timedelta(days=offset),
+            today_end + timedelta(days=offset),
+        )
 
-    elif 'yesterday' in timespan_tokens:
-        return (today_start + timedelta(days=-1 + offset),
-                today_end + timedelta(days=-1 + offset))
+    elif "yesterday" in timespan_tokens:
+        return (
+            today_start + timedelta(days=-1 + offset),
+            today_end + timedelta(days=-1 + offset),
+        )
 
-    elif 'week' in timespan_tokens:
-        return (week_start + timedelta(days=offset),
-                week_start + timedelta(days=7 + offset))
+    elif "week" in timespan_tokens:
+        return (
+            week_start + timedelta(days=offset),
+            week_start + timedelta(days=7 + offset),
+        )
 
-    elif 'month' in timespan_tokens:
+    elif "month" in timespan_tokens:
         month_index = today.month + (-last_count + next_count)
         month_index = month_index if month_index >= 1 else 12
         month_start = datetime(today.year, month_index, 1)
         month_end = datetime(today.year, month_index + 1, 1) + timedelta(-1)
         return (month_start, month_end)
 
-    elif 'year' in timespan_tokens:
+    elif "year" in timespan_tokens:
         year_number = today.year + (-last_count + next_count)
         year_start = datetime(year_number, 1, 1)
         year_end = datetime(year_number + 1, 1, 1) + timedelta(-1)
         return (year_start, year_end)
 
-    elif 'decade' in timespan_tokens:
+    elif "decade" in timespan_tokens:
         raise NotImplementedError()
 
-    elif 'century' in timespan_tokens:
+    elif "century" in timespan_tokens:
         raise NotImplementedError()
 
-    elif 'millennium' in timespan_tokens:
+    elif "millennium" in timespan_tokens:
         raise NotImplementedError()
 
     # process week days
     for idx, day_names in enumerate(
-            zip(map(str.lower, list(calendar.day_name)),
-                map(str.lower, list(calendar.day_abbr)))):
+        zip(
+            map(str.lower, list(calendar.day_name)),
+            map(str.lower, list(calendar.day_abbr)),
+        )
+    ):
         if any(x in timespan_tokens for x in day_names):
             range_start = week_start + timedelta(days=idx + offset)
             range_end = week_start + timedelta(days=idx + 1 + offset)
             return (range_start, range_end)
 
-    raise Exception('Can not determine time span.')
+    raise Exception("Can not determine time span.")
 
 
 def collect_events(configs: Configs) -> List[CalendarEvent]:
@@ -311,73 +323,80 @@ def collect_events(configs: Configs) -> List[CalendarEvent]:
     events: List[CalendarEvent] = []
     provider = configs.calendar_provider
     # if provider uses exchange api:
-    if provider.title == CalendarProviders.Exchange.value.title \
-            or provider.title == CalendarProviders.Office365.value.title:
+    if (
+        provider.title == CalendarProviders.Exchange.value.title
+        or provider.title == CalendarProviders.Office365.value.title
+    ):
         events = get_exchange_events(
             server=provider.server,
             domain=configs.domain,
             username=configs.username,
             password=configs.password,
             range_start=configs.range_start,
-            range_end=configs.range_end
-            )
+            range_end=configs.range_end,
+        )
 
     # if provider uses google mail api:
     elif provider.title == CalendarProviders.Gmail.value.title:
         events = get_google_events(
             range_start=configs.range_start,
             range_end=configs.range_end,
-            primary_only=configs.calendar_provider.server == 'primary',
-            keep_token=configs.cache_creds
+            primary_only=configs.calendar_provider.server == "primary",
+            keep_token=configs.cache_creds,
         )
 
     # otherwise the api is not implemented
     else:
-        raise Exception('Calendar provider API is not yet implemented.')
+        raise Exception("Calendar provider API is not yet implemented.")
 
     return events
 
 
-def get_exchange_events(server: str,
-                        domain: Optional[str],
-                        username: str,
-                        password: str,
-                        range_start: datetime,
-                        range_end: datetime) -> List[CalendarEvent]:
+def get_exchange_events(
+    server: str,
+    domain: Optional[str],
+    username: str,
+    password: str,
+    range_start: datetime,
+    range_end: datetime,
+) -> List[CalendarEvent]:
     """Connect to exchange calendar server and get events within range."""
     # load exchange module if necessary
     from exchangelib import Credentials, Configuration, Account, DELEGATE
     from exchangelib import EWSDateTime, EWSTimeZone
 
     # setup access
-    full_username = r'{}\{}'.format(domain, username) if domain else username
+    full_username = r"{}\{}".format(domain, username) if domain else username
     account = Account(
         primary_smtp_address=username,
-        config=Configuration(server=server,
-                             credentials=Credentials(full_username, password)),
+        config=Configuration(
+            server=server, credentials=Credentials(full_username, password)
+        ),
         autodiscover=False,
-        access_type=DELEGATE
-        )
+        access_type=DELEGATE,
+    )
 
     # collect event information within given time range
     events: List[CalendarEvent] = []
     localzone = EWSTimeZone.localzone()
     local_start = localzone.localize(EWSDateTime.from_datetime(range_start))
     local_end = localzone.localize(EWSDateTime.from_datetime(range_end))
-    for item in account.calendar.filter(    ##pylint: disable=no-member
-            start__range=(local_start, local_end)).order_by('start'):
+    for item in account.calendar.filter(  ##pylint: disable=no-member
+        start__range=(local_start, local_end)
+    ).order_by("start"):
         events.append(
             CalendarEvent(
                 title=item.subject,
                 start=item.start,
                 end=item.end,
                 duration=(item.end - item.start).seconds / 3600,
-                categories=item.categories
-            ))
+                categories=item.categories,
+            )
+        )
     return events
 
 
-def _get_google_calendar_service(keep_token: bool=True):
+def _get_google_calendar_service(keep_token: bool = True):
     # https://developers.google.com/calendar/api/quickstart/python
     from googleapiclient.discovery import build
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -385,14 +404,14 @@ def _get_google_calendar_service(keep_token: bool=True):
     from google.oauth2.credentials import Credentials
 
     # If modifying these scopes, delete the file token.json.
-    SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+    SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if keep_token and os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if keep_token and os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -401,102 +420,106 @@ def _get_google_calendar_service(keep_token: bool=True):
             flow = InstalledAppFlow.from_client_config(
                 {
                     "installed": {
-                            "client_id": "467758868362-r03j6itpkk5hl095q8ghho8kvj4nlfu0.apps.googleusercontent.com",
-                            "project_id": "calendar-time-calculator",
-                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                            "token_uri": "https://oauth2.googleapis.com/token",
-                            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                            "client_secret": "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",
-                            "redirect_uris": [
-                                "urn:ietf:wg:oauth:2.0:oob",
-                                "http://localhost"
-                        ]
+                        "client_id": "467758868362-r03j6itpkk5hl095q8ghho8kvj4nlfu0.apps.googleusercontent.com",
+                        "project_id": "calendar-time-calculator",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "client_secret": "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",
+                        "redirect_uris": [
+                            "urn:ietf:wg:oauth:2.0:oob",
+                            "http://localhost",
+                        ],
                     }
                 },
-                SCOPES
-                )
-            creds = flow.run_local_server(
-                port=0,
-                authorization_prompt_message=''
-                )
+                SCOPES,
+            )
+            creds = flow.run_local_server(port=0, authorization_prompt_message="")
         # Save the credentials for the next run
-        token_file = op.join(tempfile.gettempdir(), 'calcatime_token.json')
-        with open(token_file, 'w') as token:
+        token_file = op.join(tempfile.gettempdir(), "calcatime_token.json")
+        with open(token_file, "w") as token:
             token.write(creds.to_json())
 
-    return build('calendar', 'v3', credentials=creds)
+    return build("calendar", "v3", credentials=creds)
 
 
 def _clear_google_service():
-    token_file = op.join(tempfile.gettempdir(), 'calcatime_token.json')
+    token_file = op.join(tempfile.gettempdir(), "calcatime_token.json")
     if os.path.exists(token_file):
         os.remove(token_file)
 
 
 def get_google_events(
-        range_start: datetime,
-        range_end: datetime,
-        primary_only: bool = True,
-        keep_token: bool=True) -> List[CalendarEvent]:
+    range_start: datetime,
+    range_end: datetime,
+    primary_only: bool = True,
+    keep_token: bool = True,
+) -> List[CalendarEvent]:
     service = _get_google_calendar_service(keep_token)
     # collect calendars owned by user
     calendar_ids = []
-    calendars = service.calendarList().list().execute().get('items', [])
+    calendars = service.calendarList().list().execute().get("items", [])
     if primary_only:
-        calendar_ids = [x['id'] for x in calendars if x.get('primary', False)]
+        calendar_ids = [x["id"] for x in calendars if x.get("primary", False)]
     else:
-        calendar_ids = [x['id'] for x in calendars if x.get('accessRole', '') == 'owner']
+        calendar_ids = [
+            x["id"] for x in calendars if x.get("accessRole", "") == "owner"
+        ]
 
     events: List[CalendarEvent] = []
-    timeMin = range_start.isoformat() + 'Z' # 'Z' indicates UTC time
-    timeMax = range_end.isoformat() + 'Z' # 'Z' indicates UTC time
+    timeMin = range_start.isoformat() + "Z"  # 'Z' indicates UTC time
+    timeMax = range_end.isoformat() + "Z"  # 'Z' indicates UTC time
     for cal_id in calendar_ids:
-        events_result = service.events().list(
-            calendarId=cal_id,
-            timeMin=timeMin,
-            timeMax=timeMax,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        
-        gcal_events = events_result.get('items', [])
+        events_result = (
+            service.events()
+            .list(
+                calendarId=cal_id,
+                timeMin=timeMin,
+                timeMax=timeMax,
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+
+        gcal_events = events_result.get("items", [])
         for event in gcal_events:
             # if this is not an all-day event
-            if not event['end'].get('date', None):
-                title = event['summary']
-                start = datetime.fromisoformat(event['start']['dateTime'])
-                end = datetime.fromisoformat(event['end']['dateTime'])
+            if not event["end"].get("date", None):
+                title = event["summary"]
+                start = datetime.fromisoformat(event["start"]["dateTime"])
+                end = datetime.fromisoformat(event["end"]["dateTime"])
                 events.append(
                     CalendarEvent(
                         title=title,
                         start=start,
                         end=end,
                         duration=(end - start).seconds / 3600,
-                        categories=cal_id
-                    ))
+                        categories=cal_id,
+                    )
+                )
 
     if not keep_token:
         _clear_google_service()
     return events
 
 
-def group_events(events: List[CalendarEvent],
-                 configs: Configs)-> Dict[str, List[CalendarEvent]]:
+def group_events(
+    events: List[CalendarEvent], configs: Configs
+) -> Dict[str, List[CalendarEvent]]:
     """Group events by given attribute."""
     # group events
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     group_attr = configs.grouping_attr
     if events:
-        if group_attr.startswith('category:'):
-            _, pattern = group_attr.split(':')
+        if group_attr.startswith("category:"):
+            _, pattern = group_attr.split(":")
             if pattern:
-                grouped_events = \
-                    group_by_pattern(events, pattern, attr='category')
-        elif group_attr == 'category':
-            grouped_events = \
-                group_by_category(events)
-        elif group_attr.startswith('title:'):
-            _, pattern = group_attr.split(':')
+                grouped_events = group_by_pattern(events, pattern, attr="category")
+        elif group_attr == "category":
+            grouped_events = group_by_category(events)
+        elif group_attr.startswith("title:"):
+            _, pattern = group_attr.split(":")
             if pattern:
                 grouped_events = \
                     group_by_pattern(events, pattern, attr='title')
@@ -518,8 +541,9 @@ def group_by_title(
     return grouped_events
 
 
-def group_by_category(events: List[CalendarEvent],
-                      unknown_group='---') -> Dict[str, List[CalendarEvent]]:
+def group_by_category(
+    events: List[CalendarEvent], unknown_group="---"
+) -> Dict[str, List[CalendarEvent]]:
     """Group given events by event category."""
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     for event in events:
@@ -537,16 +561,16 @@ def group_by_category(events: List[CalendarEvent],
     return grouped_events
 
 
-def group_by_pattern(events: List[CalendarEvent],
-                     pattern: str,
-                     attr: str = 'title') -> Dict[str, List[CalendarEvent]]:
+def group_by_pattern(
+    events: List[CalendarEvent], pattern: str, attr: str = "title"
+) -> Dict[str, List[CalendarEvent]]:
     """Group given events by given regex pattern and target attribute."""
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     for event in events:
         target_tokens = []
-        if attr == 'title':
+        if attr == "title":
             target_tokens.append(event.title)
-        elif attr == 'category':
+        elif attr == "category":
             target_tokens = event.categories
 
         if target_tokens:
@@ -564,7 +588,8 @@ def group_by_pattern(events: List[CalendarEvent],
 
 
 def cal_total_duration(
-        grouped_events: Dict[str, List[CalendarEvent]]) -> Dict[str, float]:
+    grouped_events: Dict[str, List[CalendarEvent]]
+) -> Dict[str, float]:
     """Calculate total duration of events in each group."""
     hours_per_group: Dict[str, float] = {}
     for event_group, events in grouped_events.items():
@@ -575,32 +600,39 @@ def cal_total_duration(
     return hours_per_group
 
 
-def calculate_and_dump(grouped_events: Dict[str, List[CalendarEvent]],
-                       configs: Configs):
+def calculate_and_dump(
+    grouped_events: Dict[str, List[CalendarEvent]], configs: Configs
+):
     """Calculate totals and dump event data."""
     total_durations = cal_total_duration(grouped_events)
     calculated_data: List[Dict] = []
     for event_group in grouped_events:
         if not configs.include_zero and total_durations[event_group] == 0:
             continue
-        calculated_data.append({
-            'start': configs.range_start.strftime(DATETIME_FORMAT),
-            'end': configs.range_end.strftime(DATETIME_FORMAT),
-            'group': event_group,
-            'duration': total_durations[event_group]
-        })
+        calculated_data.append(
+            {
+                "start": configs.range_start.strftime(DATETIME_FORMAT),
+                "end": configs.range_end.strftime(DATETIME_FORMAT),
+                "group": event_group,
+                "duration": total_durations[event_group],
+            }
+        )
 
-    if configs.output_type == 'json':
+    if configs.output_type == "json":
         print(json.dumps(calculated_data))
-    elif configs.output_type == 'csv':
+    elif configs.output_type == "csv":
         print('"start","end","group","duration"')
         for data in calculated_data:
-            print(','.join([
-                '"{}"'.format(data['start']),
-                '"{}"'.format(data['end']),
-                '"{}"'.format(data['group']),
-                str(data['duration'])
-            ]))
+            print(
+                ",".join(
+                    [
+                        '"{}"'.format(data["start"]),
+                        '"{}"'.format(data["end"]),
+                        '"{}"'.format(data["group"]),
+                        str(data["duration"]),
+                    ]
+                )
+            )
 
 
 # Main ------------------------------------------------------------------------
@@ -619,5 +651,5 @@ def main():
     calculate_and_dump(grouped_events, configs)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
