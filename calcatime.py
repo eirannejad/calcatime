@@ -72,7 +72,7 @@ from typing import Dict, List, Optional, Tuple, Iterator
 from docopt import docopt
 from tzlocal import get_localzone
 
-__version__ = "0.7"
+__version__ = "0.8"
 
 # Configs ---------------------------------------------------------------------
 # default format used for outputting datetime values
@@ -523,7 +523,7 @@ def group_events(
             _, pattern = group_attr.split(":")
             if pattern:
                 if pattern == "[?]":
-                    grouped_events = group_by_title(events, parse_bracket_tags=True)
+                    grouped_events = group_by_bracket(events)
                 else:
                     grouped_events = group_by_pattern(events, pattern, attr="title")
         elif group_attr == "title":
@@ -531,21 +531,31 @@ def group_events(
     return grouped_events
 
 
-def group_by_title(
-    events: List[CalendarEvent], parse_bracket_tags: bool = False
-) -> Dict[str, List[CalendarEvent]]:
+def group_by_title(events: List[CalendarEvent]) -> Dict[str, List[CalendarEvent]]:
     """Group given events by event title."""
+    grouped_events: Dict[str, List[CalendarEvent]] = {}
+    for event in events:
+        title = event.title
+        if title in grouped_events:
+            grouped_events[title].append(event)
+        else:
+            grouped_events[title] = [event]
+    return grouped_events
+
+
+def group_by_bracket(events: List[CalendarEvent]) -> Dict[str, List[CalendarEvent]]:
+    """Group given events by brackets in event title."""
     grouped_events: Dict[str, List[CalendarEvent]] = {}
     for event in events:
         title = event.title
         # if title contains grouping in brackets
         m = re.match(".*\[(.+)\].*", title)
-        if parse_bracket_tags and m:
+        if m:
             title = m.groups()[0]
-        if title in grouped_events:
-            grouped_events[title].append(event)
-        else:
-            grouped_events[title] = [event]
+            if title in grouped_events:
+                grouped_events[title].append(event)
+            else:
+                grouped_events[title] = [event]
     return grouped_events
 
 
